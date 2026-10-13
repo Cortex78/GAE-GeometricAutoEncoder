@@ -15,8 +15,9 @@ Design (see chat 2026-07-04):
     * **Depth** (optional, eval only) reuses the frozen DA3 stack: the level-0
       feature is propagated through the remaining backbone blocks
       (``forward_from_layer``) to recover the deeper levels, then the DA3 DPT head
-      decodes depth. The generation-time CLS token is taken from the GT encode
-      (``encode_all``), matching the existing GLD baseline's ``replace_level_features``.
+      decodes depth. Evaluation defaults to zero CLS for this patch-only baseline.
+      Set ``DA3_DIRECT_DUMP_CLS=gt`` to explicitly use real-image CLS as an
+      ablation in geometry dumps, visualization, and timing.
 
 The codec exposes the same ``encode_views`` / ``decode_rgb`` / ``latent_dim``
 surface the V4-RAE loop already probes for (``hasattr(vae, "encode_views")``), so

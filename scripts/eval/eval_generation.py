@@ -2746,6 +2746,19 @@ def _count_module_params(*modules):
     return total
 
 
+def _da3_direct_cls_mode():
+    """Share one CLS policy across DA3-direct geometry, artifacts, and timing.
+
+    Keep the existing environment variable for compatibility. Real-image CLS
+    is an explicit ablation; the patch-only baseline defaults to zero CLS.
+    """
+    mode = os.environ.get("DA3_DIRECT_DUMP_CLS", "zero").strip().lower()
+    if mode not in ("zero", "gt"):
+        raise ValueError(
+            f"DA3_DIRECT_DUMP_CLS must be 'zero' or 'gt', got {mode!r}")
+    return mode
+
+
 def _da3_direct_geometry_propagation_modules(codec):
     """Return learned DA3 modules used to propagate a level-0 latent to geometry."""
     if getattr(codec, "level", None) not in (0, -4):
@@ -2910,6 +2923,10 @@ def main():
     latent_backend = str(cfg.get("latent_backend", "feature_vae")).lower()
     if latent_backend == "wan21":
         latent_backend = "wan2_1"
+    direct_cls_mode = None
+    if latent_backend == "da3_direct":
+        direct_cls_mode = _da3_direct_cls_mode()
+        print(f"  [da3-direct] CLS mode: {direct_cls_mode}")
     gld_config_path = args.gld_config or cfg.get("gld_config")
     if gld_config_path:
         gld_cfg = OmegaConf.load(str(gld_config_path))
@@ -4561,16 +4578,27 @@ def main():
 
             if (has_dpt and rae is not None and rae.rae_cl_decoder is not None
                     and latent_backend == "da3_direct"):
+                _dump_direct_geometry = (
+                    args.dump_geometry
+                    and len(pose_list) == actual_v
+                    and len(intri_list) == actual_v)
+                # Select once per scene so primary outputs and geometry dumps
+                # use the same state. None makes propagation use zero CLS;
+                # only the explicit GT ablation extracts real-image CLS.
+                _cls = None
+                if direct_cls_mode == "gt" and (
+                        args.timing_json or save_artifacts or _dump_direct_geometry):
+                    with torch.amp.autocast("cuda", enabled=False):
+                        _gt_all = vae.encode_all(imgs.unsqueeze(0).to(device))
+                        _cls = _gt_all[vae.level][:, 0].float()
                 # da3_direct DPT depth = propagate sampled level-0 through the
-                # frozen DA3 backbone (GT CLS token) → DPT head. GT-depth
+                # frozen DA3 backbone (shared CLS mode) → DPT head. GT-depth
                 # alignment / pointclouds are handled separately. When timing,
                 # run this primary geometry path unconditionally and fail loud:
                 # silently skipping it would produce an RGB-only timing result.
                 primary_direct_output = None
                 if args.timing_json or save_artifacts:
                     with torch.amp.autocast("cuda", enabled=False):
-                        _gt_all = vae.encode_all(imgs.unsqueeze(0).to(device))
-                        _cls = _gt_all[vae.level][:, 0].float()
                         with _primary_output_timing():
                             primary_direct_output = vae.decode_depth(
                                 z_sampled.float(), _cls, total_view=actual_v, H=H, W=W,
@@ -4599,11 +4627,9 @@ def main():
                 # ── Dump direct geometry for da3_direct (level-0 propagate) ──
                 # Same NPZ schema as the VAE backend so scripts/
                 # eval_direct_geometry.py reuses it unchanged. da3_direct has no
-                # VAE bottleneck, so vae/gtmodel == propagate(GT level-0) = the
-                # DA3-native ceiling reachable from the diffused level.
-                if (args.dump_geometry
-                        and len(pose_list) == actual_v
-                        and len(intri_list) == actual_v):
+                # VAE bottleneck, so vae/gtmodel reconstruct GT level-0 patches
+                # with the selected CLS policy, not the full DA3 forward state.
+                if _dump_direct_geometry:
                     try:
                         _dump = {}
 
@@ -4620,19 +4646,6 @@ def main():
                                 _dump[f"{prefix}_ray_conf"] = _rayconf_to_numpy(rc)
 
                         with torch.amp.autocast("cuda", enabled=False):
-                            _gt_all = vae.encode_all(imgs.unsqueeze(0).to(device))
-                            # CLS source for propagation. Default 'gt' uses the
-                            # real-frame CLS token (faithful propagation). 'zero'
-                            # withholds it (propagate uses zeros) for a fair,
-                            # self-contained comparison to the VAE backend whose
-                            # DPT decode is CLS-free (raw_no_cls_to_dpt_input).
-                            _dump_cls_mode = os.environ.get(
-                                "DA3_DIRECT_DUMP_CLS", "gt").lower()
-                            if _dump_cls_mode == "zero":
-                                _cls = None
-                            else:
-                                _cls = _gt_all[vae.level][:, 0].float()
-
                             # Propagate diffused level-0 through the frozen DA3
                             # backbone → all levels → DPT head (depth+ray+conf).
                             # We call decode_dpt directly (the tested path) rather
@@ -4648,7 +4661,7 @@ def main():
                             # NGD generated: flow-sampled level-0 → propagate → DPT
                             _ray_pack_d(_da3_direct_dpt(z_sampled.float()), "gen")
                             if args.mode == "recon":
-                                # Encode→decode (no bottleneck) = DA3-native ceiling
+                                # Reconstruct real patches with the same CLS mode.
                                 # encode_views applies its own ImageNet norm,
                                 # so it takes imgs_01, not the ImgNorm imgs.
                                 _zgt = vae.encode_views(
