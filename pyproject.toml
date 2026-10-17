@@ -17,10 +17,10 @@ dependencies = [
     "depth-anything-3>=0.1.0",
     "omegaconf",
     "einops",
-    "transformers",
+    "transformers>=4.51,<5.19",  # Qwen3 needs 4.51; 5.19+ cannot load models with torch 2.5
     "safetensors",
     "huggingface-hub",
-    "diffusers",
+    "diffusers<0.41",  # 0.41 calls torch.accelerator, which needs torch>=2.6
     "accelerate",
     "timm",
     "tqdm",
