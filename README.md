@@ -4,7 +4,8 @@
   <a href="https://arxiv.org/abs/2609.24981"><img src="https://img.shields.io/badge/arXiv-2609.24981-b31b1b.svg" alt="arXiv Paper"></a> &nbsp;
   <a href="https://jiah-cloud.github.io/GAE.github.io/"><img src="https://img.shields.io/badge/Project-Page-Green" alt="Project Page"></a> &nbsp;
   <a href="https://huggingface.co/TencentARC/GAE-D64-1B"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Weights-blue" alt="Hugging Face Weights"></a> &nbsp;
-  <a href="https://www.youtube.com/watch?v=DpPD85IK-Ko"><img src="https://img.shields.io/badge/YouTube-Video-FF0000?logo=youtube&amp;logoColor=white" alt="YouTube Video"></a>
+  <a href="https://www.youtube.com/watch?v=DpPD85IK-Ko"><img src="https://img.shields.io/badge/YouTube-Video-FF0000?logo=youtube&amp;logoColor=white" alt="YouTube Video"></a> &nbsp;
+  <a href="https://colab.research.google.com/github/Cortex78/GAE-GeometricAutoEncoder/blob/main/notebooks/GAE_Colab.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
 </p>
 
 🤗 If you find GAE useful, please consider giving this repo a ⭐. Your support helps us share and improve the project. Thank you!
@@ -133,6 +134,8 @@ validated Euler + CFG sampler in both cases. This is the fastest way to see GAE
 work; the training and evaluation workflows follow in the next section.
 
 Weights live at [`TencentARC/GAE-D64-1B`](https://huggingface.co/TencentARC/GAE-D64-1B).
+To try all three tasks without a local GPU, open
+[`notebooks/GAE_Colab.ipynb`](notebooks/GAE_Colab.ipynb) in Google Colab on an A100 runtime.
 `bash scripts/demo/run_demo.sh` creates a venv if needed (on the local disk
 when the checkout cannot host the `lib64` symlink), installs the package,
 downloads those weights when `ckpts/` is empty, then runs the bundled examples
